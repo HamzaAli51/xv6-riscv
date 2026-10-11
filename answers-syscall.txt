@@ -1,0 +1,54 @@
+1. Looking at the backtrace output, which function called syscall?
+
+usertrap() called syscall(). The backtrace shows syscall() at the top
+and usertrap() right below it, in kernel/trap.c. That makes sense because
+a system call from user space ends up in the trap handler first, and
+usertrap() then calls syscall() when it sees it was an ecall.
+
+
+2. What is the value of p->trapframe->a7 and what does that value represent?
+
+The value is 7. It is the system call number, and 7 is SYS_exec
+(see kernel/syscall.h). User code puts the syscall number in a7 before
+doing ecall. The first program xv6 starts (initcode) calls exec to run
+/init, so the very first syscall the kernel sees is exec, which is why
+a7 is 7.
+
+
+3. What was the previous mode that the CPU was in?
+
+User mode. In sstatus the SPP bit (bit 8) records the mode the CPU was in
+before the trap, and it was 0 when I printed it, which means user mode.
+That fits, since the trap came from a user program executing ecall.
+
+
+4. Write down the assembly instruction the kernel is panicking at.
+   Which register corresponds to the variable num?
+
+I searched kernel/kernel.asm for the sepc value from the panic. The
+instruction there is:
+
+    lw a3,0(zero)
+
+It loads a word from address 0. The result goes into a3, so a3 is the
+register that corresponds to the variable num. In gdb I set a breakpoint
+at the same sepc address and it stopped on the same instruction.
+
+
+5. Why does the kernel crash?
+
+Because address 0 is not mapped in the kernel's address space. The
+kernel's memory starts at KERNBASE (0x80000000), as in figure 3-3, and
+nothing sits at virtual address 0. So the load from 0 faults. The scause
+value printed in the panic was 0xd, which is "load page fault" in the
+RISC-V privileged spec, so it confirms this. The fault happens in
+supervisor mode, kerneltrap() can't recover from it, and the kernel
+panics.
+
+
+6. What is the name of the process that was running when the kernel
+   panicked? What is its process id (pid)?
+
+The process name is "initcode" and its pid is 1. Printing p->name in gdb
+at the faulting instruction gave initcode, and p->pid gave 1. It is the
+first process, and it crashes on its very first system call.

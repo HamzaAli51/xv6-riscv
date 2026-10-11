@@ -168,6 +168,8 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->sandbox_mask = 0;
+p->sandbox_path[0] = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -300,6 +302,9 @@ kfork(void)
   acquire(&np->lock);
   np->state = RUNNABLE;
   release(&np->lock);
+
+  np->sandbox_mask = p->sandbox_mask;
+safestrcpy(np->sandbox_path, p->sandbox_path, MAXPATH);
 
   return pid;
 }

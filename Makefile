@@ -154,6 +154,7 @@ UPROGS=\
 	$U/_find\
 	$U/_sixfive\
 	$U/_memdump\
+	$U/_sandbox\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
