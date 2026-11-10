@@ -107,10 +107,41 @@ sys_vmprint(void)
 #endif
 
 #ifdef LAB_PGTBL
+#define PGACCESS_MAXPAGES 4096
+
 int
 sys_pgaccess(void)
 {
-  // lab pgtbl: your code here.
+  uint64 va, uaddr;
+  int npages;
+  struct proc *p = myproc();
+  char bits[PGACCESS_MAXPAGES / 8];
+
+  argaddr(0, &va);
+  argint(1, &npages);
+  argaddr(2, &uaddr);
+
+  if (npages <= 0 || npages > PGACCESS_MAXPAGES)
+    return -1;
+  if (va >= MAXVA || va + (uint64)npages * PGSIZE > MAXVA)
+    return -1;
+
+  int nbytes = (npages + 7) / 8;
+  memset(bits, 0, nbytes);
+
+  for (int i = 0; i < npages; i++) {
+    pte_t *pte = walk(p->pagetable, va + (uint64)i * PGSIZE, 0);
+    if (pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+      return -1;                      // page not mapped
+    if (*pte & PTE_A) {
+      bits[i / 8] |= (1 << (i % 8));  // first page = least significant bit
+      *pte &= ~PTE_A;                 // clear so the next call sees fresh info
+    }
+  }
+  sfence_vma();                       // flush stale TLB entries
+
+  if (copyout(p->pagetable, p->sz, uaddr, bits, nbytes) < 0)
+    return -1;
   return 0;
 }
 #endif
