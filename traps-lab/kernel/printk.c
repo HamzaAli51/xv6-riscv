@@ -134,12 +134,33 @@ printk(char *fmt, ...)
   return 0;
 }
 
+// Print the return addresses of the functions on the current
+// kernel stack, walking up the chain of saved frame pointers.
+//
+// With frame pointers, for a frame whose pointer is fp:
+//   *(fp - 8)  is the saved return address
+//   *(fp - 16) is the saved frame pointer of the caller
+// A kernel stack is a single page, so we stop when fp leaves that page.
+void
+backtrace(void)
+{
+  uint64 fp = r_fp();
+  uint64 page = PGROUNDDOWN(fp);
+
+  printk("backtrace:\n");
+  while (PGROUNDDOWN(fp) == page) {
+    printk("%p\n", (void *)*(uint64 *)(fp - 8));
+    fp = *(uint64 *)(fp - 16);
+  }
+}
+
 void
 panic(char *s)
 {
   panicking = 1;
   printk("panic: ");
   printk("%s\n", s);
+  backtrace();
   panicked = 1; // freeze uart output from other CPUs
   for (;;)
     ;
