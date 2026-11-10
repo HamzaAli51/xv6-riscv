@@ -1,0 +1,52 @@
+1. Which registers contain arguments to functions? Which register holds 13
+   in main's call to printf?
+
+   Arguments are passed in registers a0-a7. In main's call to
+   printf("%d %d\n", f(8)+1, 13), a0 holds the address of the format
+   string, a1 holds 12, and a2 holds 13 (the instruction "li a2,13" at 0x24).
+
+2. Where is the call to function f in the assembly code for main? Where is
+   the call to g?
+
+   There is no call to either one. The compiler inlined them and computed
+   f(8)+1 = 8+3+1 = 12 at compile time, so main just loads the constant
+   with "li a1,12" (at 0x26). The functions g (at 0x0) and f (at 0xe) are
+   still compiled as separate functions, but main never calls them. Even f
+   has g inlined: it just does "addiw a0,a0,3".
+
+3. At what address is the function printf located?
+
+   0x6fe (printf is at 00000000000006fe in call.asm; main calls it with
+   "jal 6fe <printf>" at address 0x30).
+
+4. What value is in the register ra just after the jalr to printf in main?
+
+   ra = 0x34. The call is "jal 6fe <printf>" at address 0x30. A jal is a
+   4-byte instruction, so it saves the address of the next instruction,
+   0x30 + 4 = 0x34, into ra. (In this build the compiler used jal rather
+   than auipc+jalr, since printf is within jal range.)
+
+5. What is the output of printf("H%x Wo%s", 57616, (char *) &i) with
+   i = 0x00646c72?
+
+   He110 World
+
+   57616 in hex is 0xe110, so %x prints "e110". On little-endian RISC-V
+   the bytes of i in memory are 72 6c 64 00, which are the characters
+   'r', 'l', 'd' and the terminating NUL. So %s prints "rld".
+
+6. If the RISC-V were big-endian, what would you set i to? Would 57616
+   change?
+
+   i would be set to 0x726c6400, so that the bytes in memory are still
+   72 6c 64 00 ('r','l','d',NUL). 57616 would not change, because %x
+   prints the integer's value, which does not depend on byte order.
+
+7. What is printed after 'y=' in printf("x=%d y=%d", 3)?
+
+   It prints "x=3 y=" followed by an unpredictable garbage value. Only one
+   argument (3) is passed, so it is in a1 and is used for the first %d.
+   printf has no way to know how many arguments were actually passed, so
+   for the second %d it reads the next argument register, a2, which the
+   caller never set. It prints whatever value happened to be left in a2
+   from earlier code, so the value is not fixed.
