@@ -8,6 +8,10 @@
 #include "proc.h"
 #include "fs.h"
 
+#ifndef SUPERPGSIZE
+#define SUPERPGSIZE (2 * 1024 * 1024L)
+#endif
+
 /*
  * the kernel's page table.
  */
@@ -170,6 +174,9 @@ vmprint_level(pagetable_t pagetable, int level, uint64 vabase)
     if (pte & PTE_W) printk("W");
     if (pte & PTE_X) printk("X");
     if (pte & PTE_U) printk("U");
+    // a leaf PTE at level 1 maps a 2MB superpage
+    if (level == 1 && (pte & (PTE_R | PTE_W | PTE_X)))
+      printk(" superpage");
     printk("\n");
 
     // valid but no R/W/X means it points to a lower-level page table
@@ -187,13 +194,70 @@ vmprint(pagetable_t pagetable)
 #endif
 
 
+// Return the level-1 PTE for va, allocating the level-2 -> level-1
+// page-table page if needed. Kernel use only.
+static pte_t *
+walk_level1(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte = &pagetable[PX(2, va)];
+  if (*pte & PTE_V) {
+    pagetable = (pagetable_t)PTE2PA(*pte);
+  } else {
+    if ((pagetable = (pagetable_t)kalloc()) == 0)
+      return 0;
+    memset(pagetable, 0, PGSIZE);
+    *pte = PA2PTE(pagetable) | PTE_V;
+  }
+  return &pagetable[PX(1, va)];
+}
+
+// Like mappages, but uses 2MB superpages wherever va and pa are both
+// 2MB-aligned and at least 2MB remains. Only for the kernel page table.
+static int
+kmappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
+{
+  uint64 a = va, end = va + size;
+  pte_t *pte;
+
+  if ((va % PGSIZE) != 0)
+    panic("kmappages: va not aligned");
+  if ((size % PGSIZE) != 0)
+    panic("kmappages: size not aligned");
+  if (size == 0)
+    panic("kmappages: size");
+
+  while (a < end) {
+    if ((a % SUPERPGSIZE) == 0 && (pa % SUPERPGSIZE) == 0 &&
+        end - a >= SUPERPGSIZE) {
+      // one level-1 leaf PTE covers 2MB
+      if ((pte = walk_level1(pagetable, a)) == 0)
+        return -1;
+      if (*pte & PTE_V)
+        panic("kmappages: remap");
+      *pte = PA2PTE(pa) | perm | PTE_V;
+      a += SUPERPGSIZE;
+      pa += SUPERPGSIZE;
+    } else {
+      // ordinary 4KB page
+      if ((pte = walk(pagetable, a, 1)) == 0)
+        return -1;
+      if (*pte & PTE_V)
+        panic("kmappages: remap");
+      *pte = PA2PTE(pa) | perm | PTE_V;
+      a += PGSIZE;
+      pa += PGSIZE;
+    }
+  }
+  return 0;
+}
+
 // add a mapping to the kernel page table.
 // only used when booting.
 // does not flush TLB or enable paging.
 void
 kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 {
-  if (mappages(kpgtbl, va, sz, pa, perm) != 0)
+  if (kmappages(kpgtbl, va, sz, pa, perm) != 0)
     panic("kvmmap");
 }
 
