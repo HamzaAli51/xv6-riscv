@@ -1,0 +1,19 @@
+Each line printed by print_pgtbl is one page table entry (PTE) for one 4 KB page of the process’s virtual address space. The pa is the physical address the page maps to, and perm is the lowest 8 bits of the PTE. These bits are: V (valid), R (readable), W (writable), X (executable), U (accessible from user mode), G (global), A (accessed) and D (dirty). The physical pages are not consecutive because xv6 allocates them from a free list, so neighbouring virtual pages end up at scattered physical addresses.
+
+va 0x0 (perm 0x5B = V, R, X, U, A): This is the first page of the program’s text segment, which holds its code. It is readable and executable from user mode but not writable. The accessed bit is set because the CPU has already fetched instructions from it.
+
+va 0x1000 (perm 0x1B = V, R, X, U): This is the second page of the text segment. It has the same permissions as the first page, but the accessed bit is not set because no instruction has been executed from it yet.
+
+va 0x2000 (perm 0x17 = V, R, W, U): This is the data segment, which holds the program’s global variables. It is readable and writable from user mode. The accessed and dirty bits are clear because it hasn’t been used yet.
+
+va 0x3000 (perm 0x07 = V, R, W): This is the guard page. It is mapped, but the U bit is cleared, so user code cannot access it. If the stack grows too far down, the program touches this page and gets a page fault instead of silently overwriting other data.
+
+va 0x4000 (perm 0xD7 = V, R, W, U, A, D): This is the user stack. It is readable and writable from user mode. Both the accessed and dirty bits are set because the program has already read and written it.
+
+va 0x5000 to 0x9000 (pte 0x0): These pages are unmapped. The heap is empty, so these entries are not valid, and any access to them causes a page fault.
+
+va 0x3FFFFF6000 to 0x3FFFFFD000 (pte 0x0): These pages are also unmapped. They are unused space in the virtual address space below the trapframe.
+
+va 0x3FFFFFE000 (perm 0xC7 = V, R, W, A, D): This is the trapframe page. During a trap, the kernel saves the user process’s registers here. The U bit is cleared, so user code cannot touch it directly. It is readable and writable, and its accessed and dirty bits are set because the kernel has written to it.
+
+va 0x3FFFFFF000 (perm 0x4B = V, R, X, A): This is the trampoline page, which contains the code that switches between user mode and kernel mode. It is readable and executable but has no U bit, so user code cannot call it directly. Its physical address (0x80006000) is inside the kernel image, and every process maps this same physical page at the same top virtual address.
