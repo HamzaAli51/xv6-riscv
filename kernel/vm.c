@@ -148,10 +148,41 @@ walkaddr(pagetable_t pagetable, uint64 va)
 
 
 #if defined(LAB_PGTBL) || defined(SOL_MMAP) || defined(SOL_COW)
+// Recursively print one page-table page.
+// level 2 = top, 1 = middle, 0 = bottom.
+// vabase = virtual address covered by this page's first entry.
+static void
+vmprint_level(pagetable_t pagetable, int level, uint64 vabase)
+{
+  for (int i = 0; i < 512; i++) {
+    pte_t pte = pagetable[i];
+    if ((pte & PTE_V) == 0)
+      continue;
+
+    uint64 va = vabase + ((uint64)i << PXSHIFT(level));
+
+    // one " .." per depth: top level = 1, bottom level = 3
+    for (int d = 0; d < 3 - level; d++)
+      printk(" ..");
+
+    printk("%p: pte %p pa %p ", (void *)va, (void *)pte, (void *)PTE2PA(pte));
+    if (pte & PTE_R) printk("R");
+    if (pte & PTE_W) printk("W");
+    if (pte & PTE_X) printk("X");
+    if (pte & PTE_U) printk("U");
+    printk("\n");
+
+    // valid but no R/W/X means it points to a lower-level page table
+    if (level > 0 && (pte & (PTE_R | PTE_W | PTE_X)) == 0)
+      vmprint_level((pagetable_t)PTE2PA(pte), level - 1, va);
+  }
+}
+
 void
 vmprint(pagetable_t pagetable)
 {
-  // your code here
+  printk("page table %p\n", (void *)pagetable);
+  vmprint_level(pagetable, 2, 0);
 }
 #endif
 
@@ -536,5 +567,3 @@ ismapped(pagetable_t pagetable, uint64 va)
   }
   return 0;
 }
-
-
