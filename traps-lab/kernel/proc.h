@@ -81,6 +81,11 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 // Per-process state
 struct proc {
   struct spinlock lock;
+    int alarm_interval;            // 0 = alarm off
+  uint64 alarm_handler;          // user address of handler
+  int alarm_ticks;               // ticks since last alarm
+  int alarm_running;             // 1 while handler is executing
+  struct trapframe alarm_tf;     // saved registers of interrupted code
 
   // p->lock must be held when using these:
   enum procstate state; // Process state
